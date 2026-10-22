@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <script>
         mermaid.initialize({
-            startOnLoad: true,
+            startOnLoad: false,
             theme: 'default',
             flowchart: {
                 useMaxWidth: false,
@@ -40,12 +40,64 @@
         }
         .container {
             background-color: #ffffff;
-            padding: 30px;
+            padding: 0;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             border: 1px solid #e2e8f0;
             max-width: 95vw;
-            overflow-x: auto;
+            width: 95vw;
+            height: calc(100vh - 240px);
+            min-height: 420px;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+            overscroll-behavior: contain;
+        }
+        .container.dragging {
+            cursor: grabbing;
+        }
+        .container svg {
+            display: block;
+            max-width: none !important;
+            transform-origin: 0 0;
+        }
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .toolbar button {
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .toolbar button:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+        .toolbar button:active {
+            background: #e2e8f0;
+        }
+        .toolbar .zoom-level {
+            min-width: 72px;
+            font-variant-numeric: tabular-nums;
+        }
+        .hint {
+            margin: 10px 0 0;
+            color: #64748b;
+            font-size: 13px;
         }
     </style>
 </head>
@@ -53,7 +105,14 @@
 
 <div class="header">
     <h1>WhatsApp Automation Sender — Complete System Flowchart</h1>
-    <p>High-Definition Interactive View (Scroll and inspect without vertical truncation)</p>
+    <p>Drag to pan · Scroll or pinch to zoom · Double-click to fit</p>
+</div>
+
+<div class="toolbar">
+    <button id="zoom-out" title="Zoom out">−</button>
+    <button id="zoom-reset" class="zoom-level" title="Reset to 100%">100%</button>
+    <button id="zoom-in" title="Zoom in">+</button>
+    <button id="zoom-fit" title="Fit entire chart in view">Fit</button>
 </div>
 
 <div class="container">
@@ -158,6 +217,143 @@
         class InitGUI,LoadDefaults,EventLoop,ValidateInput,ThreadSpawn,ParseCLI,LoadCLIFiles,SetupEnv,DryRunLoop,CleanPhoneDry,PreviewMsg,InitSelenium,OpenWA,PromptQR,WaitAuth,InitLoggers,NextContact,CleanNumber,BuildMsg,NavChatUrl,WaitChatBox,EnableCDP,ClickAttachBtn,SendFileCDP,WaitModal,InsertCaption,SendModal,SendTextDirect,MarkSent,MarkFailed,LogRecord,AntiBanDelay,HaltBroadcast,ExportReport,Summary process;
     </div>
 </div>
+
+<script>
+    (function () {
+        const MIN_SCALE = 0.1;
+        const MAX_SCALE = 6;
+
+        function initViewer() {
+            const viewport = document.querySelector('.container');
+            const svg = viewport.querySelector('svg');
+            if (!svg) return;
+
+            svg.style.maxWidth = 'none';
+            const baseRect = svg.getBoundingClientRect();
+            const baseW = baseRect.width;
+            const baseH = baseRect.height;
+            const state = { x: 0, y: 0, scale: 1 };
+            const zoomLabel = document.getElementById('zoom-reset');
+
+            const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+            const render = () => {
+                svg.style.transform = 'translate(' + state.x + 'px, ' + state.y + 'px) scale(' + state.scale + ')';
+                zoomLabel.textContent = Math.round(state.scale * 100) + '%';
+            };
+
+            const zoomAt = (cx, cy, factor) => {
+                const nextScale = clamp(state.scale * factor, MIN_SCALE, MAX_SCALE);
+                const ratio = nextScale / state.scale;
+                state.x = cx - (cx - state.x) * ratio;
+                state.y = cy - (cy - state.y) * ratio;
+                state.scale = nextScale;
+                render();
+            };
+
+            const fitWidth = () => {
+                const vw = viewport.clientWidth;
+                state.scale = clamp(vw / baseW, MIN_SCALE, 1);
+                state.x = (vw - baseW * state.scale) / 2;
+                state.y = 0;
+                render();
+            };
+
+            const fitAll = () => {
+                const vw = viewport.clientWidth;
+                const vh = viewport.clientHeight;
+                state.scale = clamp(Math.min(vw / baseW, vh / baseH), MIN_SCALE, 1);
+                state.x = (vw - baseW * state.scale) / 2;
+                state.y = (vh - baseH * state.scale) / 2;
+                render();
+            };
+
+            const reset = () => {
+                state.scale = 1;
+                state.x = 0;
+                state.y = 0;
+                render();
+            };
+
+            viewport.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = viewport.getBoundingClientRect();
+                zoomAt(e.clientX - rect.left, e.clientY - rect.top, Math.exp(-e.deltaY * 0.0015));
+            }, { passive: false });
+
+            const pointers = new Map();
+            let lastX = 0;
+            let lastY = 0;
+            let pinchDistance = 0;
+
+            viewport.addEventListener('pointerdown', (e) => {
+                viewport.setPointerCapture(e.pointerId);
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                lastX = e.clientX;
+                lastY = e.clientY;
+                if (pointers.size === 2) {
+                    const [a, b] = [...pointers.values()];
+                    pinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
+                }
+                viewport.classList.add('dragging');
+            });
+
+            viewport.addEventListener('pointermove', (e) => {
+                if (!pointers.has(e.pointerId)) return;
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                if (pointers.size === 2) {
+                    const [a, b] = [...pointers.values()];
+                    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+                    if (pinchDistance > 0) {
+                        const rect = viewport.getBoundingClientRect();
+                        zoomAt((a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top, distance / pinchDistance);
+                    }
+                    pinchDistance = distance;
+                } else {
+                    state.x += e.clientX - lastX;
+                    state.y += e.clientY - lastY;
+                    render();
+                }
+                lastX = e.clientX;
+                lastY = e.clientY;
+            });
+
+            const endPointer = (e) => {
+                pointers.delete(e.pointerId);
+                if (pointers.size < 2) pinchDistance = 0;
+                if (pointers.size === 0) viewport.classList.remove('dragging');
+            };
+            viewport.addEventListener('pointerup', endPointer);
+            viewport.addEventListener('pointercancel', endPointer);
+
+            viewport.addEventListener('dblclick', fitWidth);
+
+            document.getElementById('zoom-in').addEventListener('click', () => {
+                zoomAt(viewport.clientWidth / 2, viewport.clientHeight / 2, 1.25);
+            });
+            document.getElementById('zoom-out').addEventListener('click', () => {
+                zoomAt(viewport.clientWidth / 2, viewport.clientHeight / 2, 0.8);
+            });
+            document.getElementById('zoom-reset').addEventListener('click', reset);
+            document.getElementById('zoom-fit').addEventListener('click', fitAll);
+
+            fitWidth();
+        }
+
+        if (window.mermaid && typeof mermaid.run === 'function') {
+            mermaid.run({ querySelector: '.mermaid' }).then(initViewer).catch((err) => {
+                console.error('Mermaid render failed:', err);
+            });
+        } else {
+            window.addEventListener('load', () => {
+                if (window.mermaid && typeof mermaid.run === 'function') {
+                    mermaid.run({ querySelector: '.mermaid' }).then(initViewer);
+                }
+            });
+        }
+    })();
+</script>
 
 </body>
 </html>
