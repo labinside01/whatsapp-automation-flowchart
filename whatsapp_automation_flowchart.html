@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Automation Sender Flowchart</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: false,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #0f172a;
+            margin-bottom: 5px;
+        }
+        .header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+            max-width: 95vw;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>WhatsApp Automation Sender — Complete System Flowchart</h1>
+    <p>High-Definition Interactive View (Scroll and inspect without vertical truncation)</p>
+</div>
+
+<div class="container">
+    <div class="mermaid">
+    flowchart TD
+        Start([Program Launch: CLI or GUI Mode]) --> CheckMode{Mode == GUI?}
+
+        %% GUI Branch
+        CheckMode -- Yes --> InitGUI[Initialize Tkinter Window & Candy-Light Theme]
+        InitGUI --> LoadDefaults[Auto-Load Default Files: data_contact.xlsx & template.txt]
+        LoadDefaults --> EventLoop[Start Main Event Loop: root.mainloop]
+        EventLoop --> UserAction{User clicks 'Start Sending'?}
+        UserAction -- No --> StopGUI([Exit Application])
+        UserAction -- Yes --> ValidateInput[Validate Contacts, Message Template & Attachments]
+        ValidateInput --> ThreadSpawn[Spawn Background Worker Thread: _broadcast_worker]
+        ThreadSpawn --> SetupEnv
+
+        %% CLI Branch
+        CheckMode -- No --> ParseCLI[Parse CLI Arguments: --dry-run, --attach, --limit, --yes]
+        ParseCLI --> LoadCLIFiles[Load Contacts & Template File]
+        LoadCLIFiles --> SetupEnv
+
+        %% Environment Setup
+        SetupEnv[Setup Environment: drop_root_privileges & check DISPLAY] --> CheckDryRun{Dry-Run Mode == True?}
+
+        %% Dry-Run Execution
+        CheckDryRun -- Yes --> DryRunLoop[Iterate Loaded Contacts]
+        DryRunLoop --> CleanPhoneDry[Clean Phone Number]
+        CleanPhoneDry --> PreviewMsg[Generate & Print Message Preview]
+        PreviewMsg --> MoreDry{More Contacts?}
+        MoreDry -- Yes --> DryRunLoop
+        MoreDry -- No --> EndDry([End Dry-Run Session])
+
+        %% Selenium Execution
+        CheckDryRun -- No --> InitSelenium[Initialize Selenium WebDriver: Brave Browser & Persistent Profile]
+        InitSelenium --> OpenWA[Open WhatsApp Web: web.whatsapp.com]
+
+        subgraph LoginCheck [WhatsApp Authentication]
+            OpenWA --> CheckAuth{Logged In?}
+            CheckAuth -- No --> CheckQR{QR Code Visible?}
+            CheckQR -- Yes --> PromptQR[Display QR Code Scan Prompt to User]
+            PromptQR --> WaitAuth[Sleep 2s & Retry Check]
+            CheckQR -- No --> WaitAuth
+            WaitAuth --> CheckAuth
+        end
+
+        CheckAuth -- Yes --> InitLoggers[Initialize Results Excel Log & Counters]
+
+        subgraph BroadcastLoop [Broadcast Processing Loop]
+            InitLoggers --> NextContact[Fetch Next Contact Row]
+            NextContact --> CheckStop{Stop Requested?}
+            CheckStop -- Yes --> HaltBroadcast[Halt Broadcast Sequence]
+            
+            CheckStop -- No --> CleanNumber[Clean Phone Number: Format to Int'l Country Code]
+            CleanNumber --> BuildMsg[Build Personalized Message: Replace Variables]
+            
+            BuildMsg --> CheckAttach{Attachment Provided?}
+            
+            %% With Attachment
+            CheckAttach -- Yes --> NavChatUrl[Navigate to Chat URL]
+            NavChatUrl --> WaitChatBox[Wait for Chat Compose UI]
+            WaitChatBox --> EnableCDP[Enable CDP File Chooser Interception]
+            EnableCDP --> ClickAttachBtn[Click Attachment Button & Select Sub-Menu]
+            ClickAttachBtn --> SendFileCDP[Deliver Attachment File via CDP / send_keys]
+            SendFileCDP --> WaitModal[Wait for Preview & Caption Modal]
+            WaitModal --> CheckCaption{Message Text Exists?}
+            CheckCaption -- Yes --> InsertCaption[Insert Text into Modal Caption Box via JS]
+            CheckCaption -- No --> SendModal[Click Send Button in Preview Modal]
+            InsertCaption --> SendModal
+
+            %% Without Attachment
+            CheckAttach -- No --> SendTextDirect[Insert Message into Compose Box via JS & Click Send]
+            
+            %% Delivery Check
+            SendModal --> VerifyDelivery{Delivery Successful?}
+            SendTextDirect --> VerifyDelivery
+            
+            VerifyDelivery -- Yes --> MarkSent[Mark Status as SENT & Increment Success Counter]
+            VerifyDelivery -- No --> MarkFailed[Mark Status as FAILED & Increment Failure Counter]
+            
+            MarkSent --> LogRecord[Record Row Details to Report Data Structure]
+            MarkFailed --> LogRecord
+            
+            LogRecord --> MoreContacts{More Contacts Remaining?}
+            MoreContacts -- Yes --> AntiBanDelay[Apply Anti-Ban Safety Delay: Random 5s to 8s Pause]
+            AntiBanDelay --> NextContact
+        end
+
+        HaltBroadcast --> ExportReport[Compile & Save Results to broadcast_report.xlsx]
+        MoreContacts -- No --> ExportReport
+        ExportReport --> Summary[Display Summary Prompt & Close Selenium Browser]
+        Summary --> End([Execution Complete])
+
+        %% Styling
+        classDef startEnd fill:#16a34a,stroke:#15803d,color:#fff,font-weight:bold;
+        classDef decision fill:#fef3c7,stroke:#d97706,color:#92400e;
+        classDef process fill:#ffffff,stroke:#cbd5e1,color:#1e293b;
+        classDef highlight fill:#dbeafe,stroke:#2563eb,color:#1e40af;
+
+        class Start,End,EndDry,StopGUI startEnd;
+        class CheckMode,UserAction,CheckDryRun,MoreDry,CheckAuth,CheckQR,CheckStop,CheckAttach,CheckCaption,VerifyDelivery,MoreContacts decision;
+        class InitGUI,LoadDefaults,EventLoop,ValidateInput,ThreadSpawn,ParseCLI,LoadCLIFiles,SetupEnv,DryRunLoop,CleanPhoneDry,PreviewMsg,InitSelenium,OpenWA,PromptQR,WaitAuth,InitLoggers,NextContact,CleanNumber,BuildMsg,NavChatUrl,WaitChatBox,EnableCDP,ClickAttachBtn,SendFileCDP,WaitModal,InsertCaption,SendModal,SendTextDirect,MarkSent,MarkFailed,LogRecord,AntiBanDelay,HaltBroadcast,ExportReport,Summary process;
+    </div>
+</div>
+
+</body>
+</html>
